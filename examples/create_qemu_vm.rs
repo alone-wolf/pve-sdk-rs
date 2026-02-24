@@ -12,6 +12,8 @@ use std::time::Duration;
 use pve_sdk_rs::{
     ClientAuth, ClientOption, PveClient, QemuActionRequest, QemuCreateRequest, WaitTaskOptions,
 };
+mod common;
+use common::{env_bool, env_required, env_u16, env_u32};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -79,29 +81,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("vm status: {:?}", status.status);
 
     Ok(())
-}
-
-fn env_required(name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    env::var(name).map_err(|_| format!("missing env var {name}").into())
-}
-
-fn env_u32(name: &str, default: u32) -> u32 {
-    env::var(name)
-        .ok()
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(default)
-}
-
-fn env_bool(name: &str, default: bool) -> bool {
-    match env::var(name) {
-        Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"),
-        Err(_) => default,
-    }
-}
-
-fn env_u16(name: &str, default: u16) -> u16 {
-    env::var(name)
-        .ok()
-        .and_then(|v| v.parse::<u16>().ok())
-        .unwrap_or(default)
 }

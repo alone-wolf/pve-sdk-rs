@@ -1304,9 +1304,24 @@ fn build_http_client(
 mod tests {
     use std::time::Duration;
 
+    use reqwest::Method;
+    use reqwest::header::{AUTHORIZATION, COOKIE};
+    use url::Url;
+
     use super::{Auth, PveClient, build_base_url, normalize_api_path};
     use crate::client_option::{ClientAuth, ClientOption};
+    use crate::error::PveError;
     use crate::params::PveParams;
+
+    fn client_with_auth(auth: Auth) -> PveClient {
+        PveClient {
+            base_url: Url::parse("https://pve.example.com:8006/").expect("base url"),
+            http: reqwest::Client::new(),
+            timeout: None,
+            connect_timeout: None,
+            auth,
+        }
+    }
 
     #[test]
     fn normalize_path_adds_api_prefix() {
@@ -1411,6 +1426,90 @@ mod tests {
             .await
             .expect_err("must fail");
         assert!(err.to_string().contains("PVE_API_TOKEN format invalid"));
+    }
+
+    #[test]
+    fn apply_auth_sets_api_token_header() {
+        let client = client_with_auth(Auth::ApiToken("root@pam!ci=secret".to_string()));
+        let request = client.http.request(
+            Method::GET,
+            "https://pve.example.com:8006/api2/json/version",
+        );
+        let request = client
+            .apply_auth(request, &Method::GET)
+            .expect("must apply auth")
+            .build()
+            .expect("request");
+        let header = request
+            .headers()
+            .get(AUTHORIZATION)
+            .expect("authorization header")
+            .to_str()
+            .expect("utf8");
+        assert_eq!(header, "PVEAPIToken=root@pam!ci=secret");
+    }
+
+    #[test]
+    fn apply_auth_ticket_get_does_not_require_csrf() {
+        let client = client_with_auth(Auth::Ticket {
+            ticket: "PVE:ticket-value".to_string(),
+            csrf: None,
+        });
+        let request = client.http.request(
+            Method::GET,
+            "https://pve.example.com:8006/api2/json/version",
+        );
+        let request = client
+            .apply_auth(request, &Method::GET)
+            .expect("must apply auth")
+            .build()
+            .expect("request");
+        assert!(request.headers().get("CSRFPreventionToken").is_none());
+        let cookie = request
+            .headers()
+            .get(COOKIE)
+            .expect("cookie header")
+            .to_str()
+            .expect("utf8");
+        assert_eq!(cookie, "PVEAuthCookie=PVE:ticket-value");
+    }
+
+    #[test]
+    fn apply_auth_ticket_write_requires_csrf() {
+        let client = client_with_auth(Auth::Ticket {
+            ticket: "PVE:ticket-value".to_string(),
+            csrf: None,
+        });
+        let request = client
+            .http
+            .request(Method::POST, "https://pve.example.com:8006/api2/json/nodes");
+        let err = client
+            .apply_auth(request, &Method::POST)
+            .expect_err("must reject missing csrf");
+        assert!(matches!(err, PveError::MissingCsrfToken));
+    }
+
+    #[test]
+    fn apply_auth_ticket_write_sets_csrf_header() {
+        let client = client_with_auth(Auth::Ticket {
+            ticket: "PVE:ticket-value".to_string(),
+            csrf: Some("csrf-token-value".to_string()),
+        });
+        let request = client
+            .http
+            .request(Method::POST, "https://pve.example.com:8006/api2/json/nodes");
+        let request = client
+            .apply_auth(request, &Method::POST)
+            .expect("must apply auth")
+            .build()
+            .expect("request");
+        let csrf = request
+            .headers()
+            .get("CSRFPreventionToken")
+            .expect("csrf header")
+            .to_str()
+            .expect("utf8");
+        assert_eq!(csrf, "csrf-token-value");
     }
 
     #[test]

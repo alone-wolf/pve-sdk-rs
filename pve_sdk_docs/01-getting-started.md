@@ -16,9 +16,11 @@
 
 ## 安装
 
+使用 GitHub 最新主分支：
+
 ```toml
 [dependencies]
-pve-sdk-rs = "0.1"
+pve-sdk-rs = { git = "https://github.com/alone-wolf/pve-sdk-rs.git", branch = "main" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

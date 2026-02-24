@@ -6,13 +6,14 @@
 // And one of: PVE_BACKUP_VMID=100 or PVE_BACKUP_ALL=1
 // Run: cargo run --example vzdump_backup
 
-use std::env;
 use std::time::Duration;
 
 use pve_sdk_rs::{
     ClientAuth, ClientOption, MailNotification, PveClient, VzdumpCompress, VzdumpMode,
     VzdumpRequest, WaitTaskOptions,
 };
+mod common;
+use common::{env_bool, env_required, env_u16};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,10 +30,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .await?;
 
-    let storage = env::var("PVE_BACKUP_STORAGE").ok();
-    let vmid = env::var("PVE_BACKUP_VMID").ok();
+    let storage = std::env::var("PVE_BACKUP_STORAGE").ok();
+    let vmid = std::env::var("PVE_BACKUP_VMID").ok();
 
-    if vmid.is_none() && env::var("PVE_BACKUP_ALL").is_err() {
+    if vmid.is_none() && std::env::var("PVE_BACKUP_ALL").is_err() {
         return Err("set PVE_BACKUP_VMID=<id> or PVE_BACKUP_ALL=1".into());
     }
 
@@ -43,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storage,
         compress: Some(VzdumpCompress::Zstd),
         mailnotification: Some(MailNotification::Failure),
-        mailto: env::var("PVE_BACKUP_MAILTO").ok(),
+        mailto: std::env::var("PVE_BACKUP_MAILTO").ok(),
         ..VzdumpRequest::default()
     };
 
@@ -64,22 +65,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     Ok(())
-}
-
-fn env_required(name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    env::var(name).map_err(|_| format!("missing env var {name}").into())
-}
-
-fn env_bool(name: &str, default: bool) -> bool {
-    match env::var(name) {
-        Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"),
-        Err(_) => default,
-    }
-}
-
-fn env_u16(name: &str, default: u16) -> u16 {
-    env::var(name)
-        .ok()
-        .and_then(|v| v.parse::<u16>().ok())
-        .unwrap_or(default)
 }

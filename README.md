@@ -17,9 +17,11 @@ Async Rust SDK for the Proxmox VE (`/api2/json`) API.
 
 ## Install
 
+From GitHub:
+
 ```toml
 [dependencies]
-pve-sdk-rs = "0.1"
+pve-sdk-rs = { git = "https://github.com/alone-wolf/pve-sdk-rs.git", branch = "main" }
 ```
 
 ## Quick Start
@@ -200,6 +202,7 @@ By default, `ClientOption::new`:
 - uses port `8006`
 - skips TLS certificate validation
 - has no HTTP timeout limits
+- expects `host` to be hostname/IP only; set port via `.port(...)`
 
 You can override TLS verification:
 

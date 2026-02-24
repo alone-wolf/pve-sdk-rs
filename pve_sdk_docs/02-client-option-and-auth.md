@@ -13,7 +13,7 @@
 
 ## ClientOption 常用字段
 
-- `host`：PVE 主机名/IP
+- `host`：PVE 主机名/IP（不带端口、不带路径）
 - `port`：默认 `8006`
 - `https`：默认 `true`
 - `insecure_tls`：默认 `true`（开发方便，生产建议关掉）
