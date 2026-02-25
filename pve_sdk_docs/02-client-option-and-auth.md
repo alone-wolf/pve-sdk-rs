@@ -46,6 +46,46 @@ client.connect().await?;
 
 如果你偏好一次性传全参，也可使用 `ClientOption::all_with_timeouts(...)`。
 
+## 组合式调用入口（推荐）
+
+`PveClient` 现在支持按域分组调用，减少方法平铺：
+
+- `client.access()`
+- `client.cluster()`
+- `client.node()`
+- `client.qemu()`
+- `client.lxc()`
+- `client.storage()`
+- `client.backup()`
+- `client.task()`
+- `client.datacenter()`
+- `client.raw()`（未封装接口 fallback）
+
+示例：
+
+```rust,no_run
+# use pve_sdk_rs::{ClientAuth, ClientOption};
+# async fn run() -> Result<(), pve_sdk_rs::PveError> {
+# let client = ClientOption::new("pve.example.com")
+#     .auth(ClientAuth::ApiToken("root@pam!ci=token-secret".to_string()))
+#     .build().await?;
+let _nodes = client.node().list().await?;
+let _qemus = client.qemu().list("pve1", Some(true)).await?;
+# Ok(())
+# }
+```
+
+## 分域类型命名空间（Phase 2）
+
+为减少类型平铺，新增 `types` 命名空间（旧的顶层导出仍保留兼容）：
+
+```rust
+use pve_sdk_rs::types;
+
+let _create = types::qemu::QemuCreateRequest::new(220);
+let _query = types::storage::StorageContentQuery::default();
+```
+
 ## 连接探活
 
 - `connect().await`：只验证可达性

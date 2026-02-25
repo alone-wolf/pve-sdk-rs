@@ -1,10 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
-use reqwest::header::{AUTHORIZATION, COOKIE, HeaderValue};
 use reqwest::{Method, RequestBuilder, multipart};
-use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::fs::File;
 use tokio::time::{Instant, sleep};
@@ -12,24 +9,20 @@ use tokio_util::io::ReaderStream;
 use url::Url;
 
 use crate::client_option::{ClientAuth, ClientOption, validate_api_token_format};
+pub use crate::core::auth::Auth;
+use crate::core::auth::apply_auth;
+use crate::core::transport::{
+    build_base_url, build_http_client, enc, execute as transport_execute, join_api_url,
+};
 use crate::error::PveError;
 use crate::models::{
-    ApiEnvelope, ClusterResource, ClusterStatusItem, LxcStatus, LxcSummary, NetworkInterface,
+    AccessAcl, AccessGroup, AccessRole, AccessUser, AccessUserToken, ClusterResource,
+    ClusterStatusItem, DatacenterConfig, LxcStatus, LxcSummary, NetworkInterface,
     NodeStorageStatus, NodeSummary, NodeTask, QemuStatus, QemuVmSummary, SnapshotInfo,
     StorageContentItem, StorageIndexItem, TaskLogLine, TaskStatus, TicketInfo, VersionInfo,
 };
 use crate::params::PveParams;
 use crate::requests;
-
-#[derive(Debug, Clone)]
-pub enum Auth {
-    None,
-    ApiToken(String),
-    Ticket {
-        ticket: String,
-        csrf: Option<String>,
-    },
-}
 
 #[derive(Debug, Clone)]
 pub struct PveClient {
@@ -160,6 +153,226 @@ impl PveClient {
 
     pub async fn version(&self) -> Result<VersionInfo, PveError> {
         self.send(Method::GET, "/version", None, None).await
+    }
+
+    pub async fn access_users(&self) -> Result<Vec<AccessUser>, PveError> {
+        self.send(Method::GET, "/access/users", None, None).await
+    }
+
+    pub async fn access_user(&self, userid: &str) -> Result<AccessUser, PveError> {
+        let path = format!("/access/users/{}", enc(userid));
+        self.send(Method::GET, &path, None, None).await
+    }
+
+    pub async fn access_create_user(&self, params: &PveParams) -> Result<Value, PveError> {
+        self.send(Method::POST, "/access/users", None, Some(params))
+            .await
+    }
+
+    pub async fn access_create_user_with(
+        &self,
+        request: &requests::AccessCreateUserRequest,
+    ) -> Result<Value, PveError> {
+        let params = request.to_params();
+        self.access_create_user(&params).await
+    }
+
+    pub async fn access_update_user(
+        &self,
+        userid: &str,
+        params: &PveParams,
+    ) -> Result<(), PveError> {
+        let path = format!("/access/users/{}", enc(userid));
+        let _: Value = self.send(Method::PUT, &path, None, Some(params)).await?;
+        Ok(())
+    }
+
+    pub async fn access_update_user_with(
+        &self,
+        userid: &str,
+        request: &requests::AccessUpdateUserRequest,
+    ) -> Result<(), PveError> {
+        let params = request.to_params();
+        self.access_update_user(userid, &params).await
+    }
+
+    pub async fn access_delete_user(&self, userid: &str) -> Result<Value, PveError> {
+        let path = format!("/access/users/{}", enc(userid));
+        self.send(Method::DELETE, &path, None, None).await
+    }
+
+    pub async fn access_groups(&self) -> Result<Vec<AccessGroup>, PveError> {
+        self.send(Method::GET, "/access/groups", None, None).await
+    }
+
+    pub async fn access_group(&self, groupid: &str) -> Result<AccessGroup, PveError> {
+        let path = format!("/access/groups/{}", enc(groupid));
+        self.send(Method::GET, &path, None, None).await
+    }
+
+    pub async fn access_create_group(&self, params: &PveParams) -> Result<Value, PveError> {
+        self.send(Method::POST, "/access/groups", None, Some(params))
+            .await
+    }
+
+    pub async fn access_create_group_with(
+        &self,
+        request: &requests::AccessCreateGroupRequest,
+    ) -> Result<Value, PveError> {
+        let params = request.to_params();
+        self.access_create_group(&params).await
+    }
+
+    pub async fn access_update_group(
+        &self,
+        groupid: &str,
+        params: &PveParams,
+    ) -> Result<(), PveError> {
+        let path = format!("/access/groups/{}", enc(groupid));
+        let _: Value = self.send(Method::PUT, &path, None, Some(params)).await?;
+        Ok(())
+    }
+
+    pub async fn access_update_group_with(
+        &self,
+        groupid: &str,
+        request: &requests::AccessUpdateGroupRequest,
+    ) -> Result<(), PveError> {
+        let params = request.to_params();
+        self.access_update_group(groupid, &params).await
+    }
+
+    pub async fn access_delete_group(&self, groupid: &str) -> Result<Value, PveError> {
+        let path = format!("/access/groups/{}", enc(groupid));
+        self.send(Method::DELETE, &path, None, None).await
+    }
+
+    pub async fn access_roles(&self) -> Result<Vec<AccessRole>, PveError> {
+        self.send(Method::GET, "/access/roles", None, None).await
+    }
+
+    pub async fn access_acl(
+        &self,
+        path: Option<&str>,
+        exact: Option<bool>,
+    ) -> Result<Vec<AccessAcl>, PveError> {
+        let mut query = PveParams::new();
+        query.insert_opt("path", path);
+        if let Some(exact) = exact {
+            query.insert_bool("exact", exact);
+        }
+        self.send(Method::GET, "/access/acl", Some(&query), None)
+            .await
+    }
+
+    pub async fn access_acl_with(
+        &self,
+        query: &requests::AccessAclQuery,
+    ) -> Result<Vec<AccessAcl>, PveError> {
+        let params = query.to_params();
+        self.send(Method::GET, "/access/acl", Some(&params), None)
+            .await
+    }
+
+    pub async fn access_set_acl(&self, params: &PveParams) -> Result<(), PveError> {
+        validate_acl_params(params)?;
+        let _: Value = self
+            .send(Method::PUT, "/access/acl", None, Some(params))
+            .await?;
+        Ok(())
+    }
+
+    pub async fn access_set_acl_with(
+        &self,
+        request: &requests::AccessSetAclRequest,
+    ) -> Result<(), PveError> {
+        let params = request.to_params();
+        self.access_set_acl(&params).await
+    }
+
+    pub async fn access_delete_acl_with(
+        &self,
+        request: &requests::AccessDeleteAclRequest,
+    ) -> Result<(), PveError> {
+        let params = request.to_params();
+        self.access_set_acl(&params).await
+    }
+
+    pub async fn access_user_tokens(&self, userid: &str) -> Result<Vec<AccessUserToken>, PveError> {
+        let path = format!("/access/users/{}/token", enc(userid));
+        self.send(Method::GET, &path, None, None).await
+    }
+
+    pub async fn access_create_user_token(
+        &self,
+        userid: &str,
+        tokenid: &str,
+        params: &PveParams,
+    ) -> Result<Value, PveError> {
+        let path = format!("/access/users/{}/token", enc(userid));
+        let mut body = params.clone();
+        body.insert("tokenid", tokenid);
+        self.send(Method::POST, &path, None, Some(&body)).await
+    }
+
+    pub async fn access_create_user_token_with(
+        &self,
+        userid: &str,
+        request: &requests::AccessCreateTokenRequest,
+    ) -> Result<Value, PveError> {
+        let params = request.to_params();
+        self.access_create_user_token(userid, &request.tokenid, &params)
+            .await
+    }
+
+    pub async fn access_update_user_token(
+        &self,
+        userid: &str,
+        tokenid: &str,
+        params: &PveParams,
+    ) -> Result<(), PveError> {
+        let path = format!("/access/users/{}/token/{}", enc(userid), enc(tokenid));
+        let _: Value = self.send(Method::PUT, &path, None, Some(params)).await?;
+        Ok(())
+    }
+
+    pub async fn access_update_user_token_with(
+        &self,
+        userid: &str,
+        tokenid: &str,
+        request: &requests::AccessUpdateTokenRequest,
+    ) -> Result<(), PveError> {
+        let params = request.to_params();
+        self.access_update_user_token(userid, tokenid, &params)
+            .await
+    }
+
+    pub async fn access_delete_user_token(
+        &self,
+        userid: &str,
+        tokenid: &str,
+    ) -> Result<Value, PveError> {
+        let path = format!("/access/users/{}/token/{}", enc(userid), enc(tokenid));
+        self.send(Method::DELETE, &path, None, None).await
+    }
+
+    pub async fn datacenter_config(&self) -> Result<DatacenterConfig, PveError> {
+        self.send(Method::GET, "/cluster/options", None, None).await
+    }
+
+    pub async fn datacenter_update_config(&self, params: &PveParams) -> Result<(), PveError> {
+        let _: Value = self
+            .send(Method::PUT, "/cluster/options", None, Some(params))
+            .await?;
+        Ok(())
+    }
+
+    pub async fn datacenter_update_config_with(
+        &self,
+        request: &requests::DatacenterConfigUpdateRequest,
+    ) -> Result<(), PveError> {
+        let params = request.to_params();
+        self.datacenter_update_config(&params).await
     }
 
     pub async fn nodes(&self) -> Result<Vec<NodeSummary>, PveError> {
@@ -1078,6 +1291,36 @@ impl PveClient {
             .await
     }
 
+    pub async fn raw_json(
+        &self,
+        method: Method,
+        path: &str,
+        query: Option<&PveParams>,
+        form: Option<&PveParams>,
+    ) -> Result<Value, PveError> {
+        self.send(method, path, query, form).await
+    }
+
+    pub async fn raw_get(&self, path: &str, query: Option<&PveParams>) -> Result<Value, PveError> {
+        self.raw_json(Method::GET, path, query, None).await
+    }
+
+    pub async fn raw_post(&self, path: &str, form: Option<&PveParams>) -> Result<Value, PveError> {
+        self.raw_json(Method::POST, path, None, form).await
+    }
+
+    pub async fn raw_put(&self, path: &str, form: Option<&PveParams>) -> Result<Value, PveError> {
+        self.raw_json(Method::PUT, path, None, form).await
+    }
+
+    pub async fn raw_delete(
+        &self,
+        path: &str,
+        query: Option<&PveParams>,
+    ) -> Result<Value, PveError> {
+        self.raw_json(Method::DELETE, path, query, None).await
+    }
+
     async fn qemu_action(
         &self,
         node: &str,
@@ -1108,7 +1351,7 @@ impl PveClient {
         form: Option<&PveParams>,
     ) -> Result<T, PveError>
     where
-        T: DeserializeOwned,
+        T: serde::de::DeserializeOwned,
     {
         let url = self.url(path)?;
         let mut request = self.http.request(method.clone(), url);
@@ -1135,7 +1378,7 @@ impl PveClient {
         form: multipart::Form,
     ) -> Result<T, PveError>
     where
-        T: DeserializeOwned,
+        T: serde::de::DeserializeOwned,
     {
         let url = self.url(path)?;
         let request = self.apply_auth(self.http.request(method.clone(), url), &method)?;
@@ -1145,21 +1388,9 @@ impl PveClient {
 
     async fn execute<T>(&self, request: RequestBuilder) -> Result<T, PveError>
     where
-        T: DeserializeOwned,
+        T: serde::de::DeserializeOwned,
     {
-        let response = request.send().await?;
-        let status = response.status();
-        let body = response.text().await?;
-
-        if !status.is_success() {
-            return Err(PveError::ApiStatus {
-                status: status.as_u16(),
-                body,
-            });
-        }
-
-        let payload: ApiEnvelope<T> = serde_json::from_str(&body)?;
-        Ok(payload.data)
+        transport_execute(request).await
     }
 
     fn apply_auth(
@@ -1167,137 +1398,53 @@ impl PveClient {
         request: RequestBuilder,
         method: &Method,
     ) -> Result<RequestBuilder, PveError> {
-        match &self.auth {
-            Auth::None => Ok(request),
-            Auth::ApiToken(token) => {
-                let value = format!("PVEAPIToken={token}");
-                Ok(request.header(
-                    AUTHORIZATION,
-                    HeaderValue::from_str(&value).map_err(|_| {
-                        PveError::InvalidArgument("invalid api token header value".to_string())
-                    })?,
-                ))
-            }
-            Auth::Ticket { ticket, csrf } => {
-                let mut request = request.header(COOKIE, format!("PVEAuthCookie={ticket}"));
-
-                let is_write = matches!(
-                    *method,
-                    Method::POST | Method::PUT | Method::DELETE | Method::PATCH
-                );
-
-                if is_write {
-                    let csrf = csrf.as_deref().ok_or(PveError::MissingCsrfToken)?;
-                    request = request.header("CSRFPreventionToken", csrf);
-                }
-
-                Ok(request)
-            }
-        }
+        apply_auth(&self.auth, request, method)
     }
 
     fn url(&self, path: &str) -> Result<Url, PveError> {
-        let normalized = normalize_api_path(path);
-        self.base_url
-            .join(normalized.trim_start_matches('/'))
-            .map_err(|_| PveError::InvalidBaseUrl(format!("unable to join path: {normalized}")))
+        join_api_url(&self.base_url, path)
     }
 }
 
-fn normalize_api_path(path: &str) -> String {
-    if path.starts_with("/api2/json") {
-        return path.to_string();
+fn validate_acl_params(params: &PveParams) -> Result<(), PveError> {
+    fn has_non_empty(params: &PveParams, key: &str) -> bool {
+        params.get(key).is_some_and(|v| !v.trim().is_empty())
     }
 
-    if path.starts_with('/') {
-        format!("/api2/json{path}")
-    } else {
-        format!("/api2/json/{path}")
-    }
-}
-
-fn enc(value: &str) -> String {
-    utf8_percent_encode(value, NON_ALPHANUMERIC).to_string()
-}
-
-fn build_base_url(host: &str, port: u16, https: bool) -> Result<Url, PveError> {
-    let mut host = host.trim().to_string();
-    if host.starts_with("https://") || host.starts_with("http://") {
-        let parsed = Url::parse(&host).map_err(|_| {
-            PveError::InvalidBaseUrl(
-                "invalid host URL, expected a hostname or IP without path/port".to_string(),
-            )
-        })?;
-        if parsed.port().is_some() {
-            return Err(PveError::InvalidBaseUrl(
-                "host must not include port, use ClientOption::port()".to_string(),
-            ));
-        }
-        if parsed.path() != "/" {
-            return Err(PveError::InvalidBaseUrl(
-                "host must not include path, use API methods with relative paths".to_string(),
-            ));
-        }
-        if parsed.query().is_some() || parsed.fragment().is_some() {
-            return Err(PveError::InvalidBaseUrl(
-                "host must not include query or fragment".to_string(),
-            ));
-        }
-        if !parsed.username().is_empty() || parsed.password().is_some() {
-            return Err(PveError::InvalidBaseUrl(
-                "host must not include credentials".to_string(),
-            ));
-        }
-        host = parsed.host_str().unwrap_or_default().to_string();
-    }
-
-    host = host.trim_end_matches('/').to_string();
-    if host.contains('/') {
-        return Err(PveError::InvalidBaseUrl(
-            "host must not include path, use ClientOption::host(\"pve.example.com\")".to_string(),
-        ));
-    }
-    if host.contains('?') || host.contains('#') {
-        return Err(PveError::InvalidBaseUrl(
-            "host must not include query or fragment".to_string(),
-        ));
-    }
-    if host.contains('@') {
-        return Err(PveError::InvalidBaseUrl(
-            "host must not include credentials".to_string(),
-        ));
-    }
-    if host.contains("]:") || (host.matches(':').count() == 1 && !host.starts_with('[')) {
-        return Err(PveError::InvalidBaseUrl(
-            "host must not include port, use ClientOption::port()".to_string(),
+    if !has_non_empty(params, "path") {
+        return Err(PveError::InvalidArgument(
+            "access acl requires non-empty path".to_string(),
         ));
     }
 
-    if host.matches(':').count() > 1 && !host.starts_with('[') && !host.ends_with(']') {
-        host = format!("[{host}]");
-    }
-    if host.is_empty() {
-        return Err(PveError::InvalidBaseUrl("host is empty".to_string()));
+    let delete_acl = params
+        .get("delete")
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let has_target = has_non_empty(params, "users")
+        || has_non_empty(params, "groups")
+        || has_non_empty(params, "tokens");
+
+    if delete_acl {
+        let has_roles = has_non_empty(params, "roles");
+        if !(has_roles || has_target) {
+            return Err(PveError::InvalidArgument(
+                "access acl delete requires at least one of roles/users/groups/tokens".to_string(),
+            ));
+        }
+        return Ok(());
     }
 
-    let scheme = if https { "https" } else { "http" };
-    let base = format!("{scheme}://{host}:{port}/");
-    Url::parse(&base).map_err(|_| PveError::InvalidBaseUrl(base))
-}
-
-fn build_http_client(
-    insecure_tls: bool,
-    timeout: Option<Duration>,
-    connect_timeout: Option<Duration>,
-) -> Result<reqwest::Client, PveError> {
-    let mut builder = reqwest::Client::builder().danger_accept_invalid_certs(insecure_tls);
-    if let Some(timeout) = timeout {
-        builder = builder.timeout(timeout);
+    if !has_non_empty(params, "roles") {
+        return Err(PveError::InvalidArgument(
+            "access acl set requires non-empty roles".to_string(),
+        ));
     }
-    if let Some(connect_timeout) = connect_timeout {
-        builder = builder.connect_timeout(connect_timeout);
+    if !has_target {
+        return Err(PveError::InvalidArgument(
+            "access acl set requires at least one of users/groups/tokens".to_string(),
+        ));
     }
-    builder.build().map_err(PveError::from)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1308,10 +1455,12 @@ mod tests {
     use reqwest::header::{AUTHORIZATION, COOKIE};
     use url::Url;
 
-    use super::{Auth, PveClient, build_base_url, normalize_api_path};
+    use super::{Auth, PveClient};
     use crate::client_option::{ClientAuth, ClientOption};
+    use crate::core::transport::{build_base_url, normalize_api_path};
     use crate::error::PveError;
     use crate::params::PveParams;
+    use crate::requests;
 
     fn client_with_auth(auth: Auth) -> PveClient {
         PveClient {
@@ -1520,5 +1669,37 @@ mod tests {
 
         assert_eq!(params.get("full"), Some("1"));
         assert_eq!(params.get("onboot"), Some("0"));
+    }
+
+    #[tokio::test]
+    async fn access_set_acl_rejects_missing_subject() {
+        let client = ClientOption::new("pve.example.com")
+            .api_token("root@pam!ci=token")
+            .build()
+            .await
+            .expect("must build");
+
+        let request = requests::AccessSetAclRequest::new("/vms", "PVEVMAdmin");
+        let err = client
+            .access_set_acl_with(&request)
+            .await
+            .expect_err("must reject missing subject");
+        assert!(matches!(err, PveError::InvalidArgument(_)));
+    }
+
+    #[tokio::test]
+    async fn access_delete_acl_rejects_missing_targets() {
+        let client = ClientOption::new("pve.example.com")
+            .api_token("root@pam!ci=token")
+            .build()
+            .await
+            .expect("must build");
+
+        let request = requests::AccessDeleteAclRequest::new("/vms");
+        let err = client
+            .access_delete_acl_with(&request)
+            .await
+            .expect_err("must reject missing target");
+        assert!(matches!(err, PveError::InvalidArgument(_)));
     }
 }

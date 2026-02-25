@@ -7,8 +7,10 @@ Async Rust SDK for the Proxmox VE (`/api2/json`) API.
 - API token and ticket auth support
 - Username/password login support (auto ticket exchange on build)
 - Typed request builders for common VM/LXC/storage operations
+- Access 管理面基础能力（users/groups/ACL/token）与 Datacenter config
 - Task polling helpers for async PVE jobs (UPID)
 - Multipart upload support for storage endpoints
+- Raw endpoint fallback (`client.raw()`) for not-yet-typed APIs
 
 ## Documentation
 
@@ -84,6 +86,40 @@ let _client = ClientOption::new("pve.example.com")
     .await?;
 # Ok(())
 # }
+```
+
+Grouped API style (recommended for discoverability):
+
+```rust,no_run
+use pve_sdk_rs::{ClientAuth, ClientOption};
+
+# async fn run() -> Result<(), pve_sdk_rs::PveError> {
+let client = ClientOption::new("pve.example.com")
+    .auth(ClientAuth::ApiToken("root@pam!ci=token-secret".to_string()))
+    .build()
+    .await?;
+
+let _nodes = client.node().list().await?;
+let _vms = client.qemu().list("pve1", Some(true)).await?;
+let _dc = client.datacenter().config().await?;
+let _raw = client.raw().get("/cluster/resources", None).await?;
+# Ok(())
+# }
+```
+
+ACL write validation rules (preflight in SDK):
+
+- `set_acl_with`: requires `path`, `roles`, and at least one target in `users/groups/tokens`
+- `delete_acl_with`: requires `path`, and at least one target in `roles/users/groups/tokens`
+- invalid payload returns `PveError::InvalidArgument` before sending request
+
+Domain-grouped type namespace is also available:
+
+```rust,no_run
+use pve_sdk_rs::types;
+
+let _create = types::qemu::QemuCreateRequest::new(220);
+let _tasks = types::node::NodeTasksQuery::default();
 ```
 
 Full-parameter initializer form:

@@ -58,3 +58,20 @@ cargo run --example <example_name>
 - 你必须二选一：
   - `PVE_BACKUP_VMID`
   - `PVE_BACKUP_ALL=1`
+
+## access_acl_manage
+
+- 文件：`examples/access_acl_manage.rs`
+- 作用：演示 Access ACL 写操作与 SDK 本地参数校验（支持 dry-run）
+- 必需变量：
+  - `PVE_HOST`
+  - `PVE_AUTH_METHOD`
+- 认证相关变量：见 `03-auth-methods-env.md`
+- 可选：
+  - `PVE_PORT`
+  - `PVE_INSECURE_TLS`
+  - `PVE_ACL_APPLY=1`（开启真实写入）
+  - `PVE_ACL_PATH`
+  - `PVE_ACL_ROLES`
+  - `PVE_ACL_USERS` / `PVE_ACL_GROUPS` / `PVE_ACL_TOKENS`
+  - `PVE_ACL_DELETE_AFTER_SET=1`（回滚）

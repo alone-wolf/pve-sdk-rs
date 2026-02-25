@@ -35,3 +35,9 @@
 
 - 推荐统一使用 `ClientAuth::from_env()`
 - 让部署环境只改变量，不改代码
+
+## 8) ACL 写操作先做参数自检
+
+- `AccessSetAclRequest` 需要 `path + roles + (users/groups/tokens 至少一个)`
+- `AccessDeleteAclRequest` 需要 `path + (roles/users/groups/tokens 至少一个)`
+- 这类错误优先在本地修正，避免把无效 ACL 请求发到服务端

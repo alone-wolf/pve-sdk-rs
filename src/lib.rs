@@ -37,19 +37,27 @@
 //! ```
 
 mod client;
+mod client_api;
 mod client_option;
+mod core;
 mod error;
 mod models;
 mod params;
 mod requests;
+pub mod types;
 
 pub use client::{Auth, PveClient};
+pub use client_api::{
+    AccessApi, BackupApi, ClusterApi, DatacenterApi, LxcApi, NodeApi, QemuApi, RawApi, StorageApi,
+    TaskApi,
+};
 pub use client_option::{ClientAuth, ClientOption};
 pub use error::PveError;
 pub use models::{
-    ClusterResource, ClusterStatusItem, LxcStatus, LxcSummary, NetworkInterface, NodeStorageStatus,
-    NodeSummary, NodeTask, QemuStatus, QemuVmSummary, SnapshotInfo, StorageContentItem,
-    StorageIndexItem, TaskLogLine, TaskStatus, TicketInfo, VersionInfo,
+    AccessAcl, AccessGroup, AccessRole, AccessUser, AccessUserToken, ClusterResource,
+    ClusterStatusItem, DatacenterConfig, LxcStatus, LxcSummary, NetworkInterface,
+    NodeStorageStatus, NodeSummary, NodeTask, QemuStatus, QemuVmSummary, SnapshotInfo,
+    StorageContentItem, StorageIndexItem, TaskLogLine, TaskStatus, TicketInfo, VersionInfo,
 };
 pub use params::PveParams;
 pub use requests::*;
