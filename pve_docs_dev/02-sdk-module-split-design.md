@@ -1,5 +1,7 @@
 # pve-sdk-rs 功能拆分与组合改进设计（基于 PVE 官方模块）
 
+> 状态同步（2026-02-25）：本文最初是重构设计稿；其中 `client.raw()`、grouped API 与 Access/Datacenter 基础能力已落地。
+
 ## 1. 背景与问题
 
 当前 SDK 将大部分能力集中在 `src/client.rs`，导致：
@@ -28,7 +30,7 @@
 
 基于当前已有的文档模块，定义第一层 API 域：
 
-- `access`：认证票据与后续用户/ACL/token 管理（当前只覆盖 ticket 登录）
+- `access`：认证票据 + users/groups/roles/ACL/token 管理
 - `cluster`：`/cluster/*`
 - `node`：`/nodes/{node}/*` 中通用节点能力
 - `qemu`：`/nodes/{node}/qemu/*`
@@ -39,7 +41,6 @@
 
 后续增量模块（P1/P2）：
 
-- `datacenter`
 - `firewall`
 - `ha`
 - `replication`
@@ -206,7 +207,7 @@ let status = client.task().wait("pve1", &upid, &wait_opts).await?;
 
 ## Phase 3：补齐缺口模块
 
-- 优先 `access/datacenter`，再 `firewall/ha/sdn/ceph`
+- 优先 `firewall/ha/sdn/ceph`，并继续补深各域 typed 覆盖
 - 每个模块：typed + example + docs + tests
 
 ---
@@ -246,11 +247,16 @@ let status = client.task().wait("pve1", &upid, &wait_opts).await?;
 
 ---
 
-## 12. 建议立即执行的最小改造包
+## 12. 最小改造包状态
 
-1. 抽出 `core/transport.rs` + `core/auth.rs`（不改公开 API）
-2. 新增 `client.raw()` fallback（先解锁全 API 可达）
-3. 落地 `client.qemu()/lxc()/storage()/task()` 组合式入口
-4. 保留旧方法转发，文档新增新旧对照
+已完成：
 
-该改造包可以在不破坏现有用户代码的前提下，显著降低 `src/client.rs` 臃肿度，并为后续官方模块补齐建立稳定骨架。
+1. `core/transport.rs` + `core/auth.rs` 拆分
+2. `client.raw()` fallback
+3. grouped API 入口（含 Access/Datacenter/Raw）
+4. 兼容平铺 API + 文档示例同步
+
+下一步建议：
+
+1. 继续拆分 `src/client.rs` / `src/client_api.rs` 以降低单文件复杂度
+2. 优先补 Firewall/HA 模块的最小 typed 覆盖
