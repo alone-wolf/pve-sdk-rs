@@ -5,19 +5,21 @@
 写接口通常返回 `UPID`，建议模式：
 
 1. 发起任务拿 `UPID`
-2. `wait_for_task_with_options` 轮询
-3. 对失败任务读取 `task_log`
+2. `client.task().wait_with_options` 轮询
+3. 对失败任务读取 `client.task().log_with`
 
 ```rust,no_run
 # use std::time::Duration;
-# use pve_sdk_rs::{ClientAuth, ClientOption, WaitTaskOptions};
+# use pve_sdk_rs::{ClientAuth, ClientOption};
+# use pve_sdk_rs::types::task::WaitTaskOptions;
 # async fn run() -> Result<(), pve_sdk_rs::PveError> {
 # let client = ClientOption::new("pve.example.com")
 #     .auth(ClientAuth::ApiToken("root@pam!ci=token-secret".to_string()))
 #     .build().await?;
 # let upid = String::from("UPID:...");
 let status = client
-    .wait_for_task_with_options(
+    .task()
+    .wait_with_options(
         "pve1",
         &upid,
         &WaitTaskOptions {

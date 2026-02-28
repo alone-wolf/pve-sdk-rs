@@ -23,29 +23,15 @@
 
 use std::env;
 
-use dotenvy::dotenv;
-use pve_sdk_rs::{
-    AccessDeleteAclRequest, AccessSetAclRequest, ClientAuth, ClientOption, PveClient, PveError,
-};
+use pve_sdk_rs::PveError;
+use pve_sdk_rs::types::access::{AccessDeleteAclRequest, AccessSetAclRequest};
 
 mod common;
-use common::{env_bool, env_required, env_u16};
+use common::{build_client_from_env, env_bool, env_required};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
-
-    let host = env_required("PVE_HOST")?;
-    let port = env_u16("PVE_PORT", PveClient::DEFAULT_PORT);
-    let insecure_tls = env_bool("PVE_INSECURE_TLS", true);
-    let auth = ClientAuth::from_env()?;
-
-    let client = ClientOption::new(host)
-        .port(port)
-        .insecure_tls(insecure_tls)
-        .auth(auth)
-        .build()
-        .await?;
+    let client = build_client_from_env().await?;
 
     client.connect().await?;
 

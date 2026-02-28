@@ -1,35 +1,19 @@
-// Minimal env (API_TOKEN) with `.env`:
+// Minimal env:
 // PVE_HOST=10.0.0.2
-// PVE_PORT=8006
-// PVE_INSECURE_TLS=true
 // PVE_AUTH_METHOD=API_TOKEN
 // PVE_API_TOKEN='root@pam!ci=token-secret'
 // Run: cargo run --example list_all_guests
 
-use dotenvy::dotenv;
-use pve_sdk_rs::{ClientAuth, ClientOption, PveClient};
 mod common;
-use common::{env_bool, env_required, env_u16};
+use common::build_client_from_env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
-
-    let host = env_required("PVE_HOST")?;
-    let port = env_u16("PVE_PORT", PveClient::DEFAULT_PORT);
-    let insecure_tls = env_bool("PVE_INSECURE_TLS", true);
-    let auth = ClientAuth::from_env()?;
-
-    let client = ClientOption::new(host)
-        .port(port)
-        .insecure_tls(insecure_tls)
-        .auth(auth)
-        .build()
-        .await?;
+    let client = build_client_from_env().await?;
 
     client.connect().await?;
 
-    let nodes = client.nodes().await?;
+    let nodes = client.node().list().await?;
     if nodes.is_empty() {
         println!("no nodes found");
         return Ok(());
@@ -40,8 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for node in nodes {
         let node_name = node.node;
-        let qemus = client.qemu_list(&node_name, Some(true)).await?;
-        let lxcs = client.lxc_list(&node_name).await?;
+        let qemus = client.qemu().list(&node_name, Some(true)).await?;
+        let lxcs = client.lxc().list(&node_name).await?;
 
         println!("\nnode={node_name}");
         println!("  qemu count={}", qemus.len());

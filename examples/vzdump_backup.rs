@@ -8,27 +8,15 @@
 
 use std::time::Duration;
 
-use pve_sdk_rs::{
-    ClientAuth, ClientOption, MailNotification, PveClient, VzdumpCompress, VzdumpMode,
-    VzdumpRequest, WaitTaskOptions,
-};
+use pve_sdk_rs::types::backup::{MailNotification, VzdumpCompress, VzdumpMode, VzdumpRequest};
+use pve_sdk_rs::types::task::WaitTaskOptions;
 mod common;
-use common::{env_bool, env_required, env_u16};
+use common::{build_client_from_env, env_bool, env_required};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let host = env_required("PVE_HOST")?;
-    let port = env_u16("PVE_PORT", PveClient::DEFAULT_PORT);
     let node = env_required("PVE_NODE")?;
-    let insecure_tls = env_bool("PVE_INSECURE_TLS", true);
-    let auth = ClientAuth::from_env()?;
-
-    let client = ClientOption::new(host)
-        .port(port)
-        .insecure_tls(insecure_tls)
-        .auth(auth)
-        .build()
-        .await?;
+    let client = build_client_from_env().await?;
 
     let storage = std::env::var("PVE_BACKUP_STORAGE").ok();
     let vmid = std::env::var("PVE_BACKUP_VMID").ok();
@@ -48,16 +36,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..VzdumpRequest::default()
     };
 
-    let upid = client.vzdump_backup_with(&node, &req).await?;
+    let upid = client.backup().vzdump_with(&node, &req).await?;
     println!("backup task started: {upid}");
 
     let wait = WaitTaskOptions {
         poll_interval: Duration::from_secs(3),
         timeout: Some(Duration::from_secs(3600)),
     };
-    let status = client
-        .wait_for_task_with_options(&node, &upid, &wait)
-        .await?;
+    let status = client.task().wait_with_options(&node, &upid, &wait).await?;
 
     println!(
         "backup finished: status={} exitstatus={:?}",

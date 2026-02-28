@@ -1,7 +1,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pve_sdk_rs::{ClientOption, PveError, WaitTaskOptions};
+use pve_sdk_rs::types::task::WaitTaskOptions;
+use pve_sdk_rs::{ClientOption, PveError};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;

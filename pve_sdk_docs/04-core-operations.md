@@ -9,7 +9,7 @@
 #     .auth(ClientAuth::ApiToken("root@pam!ci=token-secret".to_string()))
 #     .build().await?;
 let version = client.connect_with_version().await?;
-let nodes = client.nodes().await?;
+let nodes = client.node().list().await?;
 println!("version={} nodes={}", version.version, nodes.len());
 # Ok(())
 # }
@@ -23,9 +23,9 @@ println!("version={} nodes={}", version.version, nodes.len());
 # let client = ClientOption::new("pve.example.com")
 #     .auth(ClientAuth::ApiToken("root@pam!ci=token-secret".to_string()))
 #     .build().await?;
-for node in client.nodes().await? {
-    let qemus = client.qemu_list(&node.node, Some(true)).await?;
-    let lxcs = client.lxc_list(&node.node).await?;
+for node in client.node().list().await? {
+    let qemus = client.qemu().list(&node.node, Some(true)).await?;
+    let lxcs = client.lxc().list(&node.node).await?;
     println!("node={} qemu={} lxc={}", node.node, qemus.len(), lxcs.len());
 }
 # Ok(())
@@ -36,15 +36,15 @@ for node in client.nodes().await? {
 
 很多写操作返回 `UPID`，例如：
 
-- `qemu_create_with`
-- `qemu_start_with` / `qemu_stop_with`
-- `vzdump_backup_with`
+- `client.qemu().create_with`
+- `client.qemu().start_with` / `client.qemu().stop_with`
+- `client.backup().vzdump_with`
 
-拿到 `UPID` 后建议使用 `wait_for_task_with_options`。
+拿到 `UPID` 后建议使用 `client.task().wait_with_options`。
 
 ## 存储上传
 
-- 使用 `storage_upload_with` 或 `storage_upload_file`
+- 使用 `client.storage().upload_with` 或 `client.storage().upload_file`
 - 当前实现为流式上传，更适合大文件
 
 ## Access / Datacenter / Raw fallback
@@ -65,7 +65,8 @@ let _raw = client.raw().get("/cluster/resources", Some(&PveParams::new())).await
 Access 用户/组/ACL 管理（增删改）：
 
 ```rust,no_run
-# use pve_sdk_rs::{AccessCreateUserRequest, AccessSetAclRequest, ClientAuth, ClientOption};
+# use pve_sdk_rs::{ClientAuth, ClientOption};
+# use pve_sdk_rs::types::access::{AccessCreateUserRequest, AccessSetAclRequest};
 # async fn run() -> Result<(), pve_sdk_rs::PveError> {
 # let client = ClientOption::new("pve.example.com")
 #     .auth(ClientAuth::ApiToken("root@pam!ci=token-secret".to_string()))

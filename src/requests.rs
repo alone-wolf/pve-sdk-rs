@@ -1,6 +1,7 @@
 //! Backward-compatible request/query re-exports.
 //!
 //! New code should prefer domain-grouped modules under `crate::types`.
+#![allow(unused_imports)]
 
 pub use crate::types::access::{
     AccessAclQuery, AccessCreateGroupRequest, AccessCreateTokenRequest, AccessCreateUserRequest,

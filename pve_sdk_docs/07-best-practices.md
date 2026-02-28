@@ -18,7 +18,7 @@
 
 ## 4) 任务接口必须带超时
 
-- 调 `wait_for_task_with_options` 时设置 `timeout`
+- 调 `client.task().wait_with_options` 时设置 `timeout`
 - 超时后拉 `task_log`，不要盲目无限重试
 
 ## 5) 配置 HTTP 超时
